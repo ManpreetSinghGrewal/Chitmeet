@@ -28,6 +28,8 @@ const io = new Server(server, {
   }
 });
 
+let waitingUser = null; // For Omegle-style matching
+
 io.on('connection', async (socket) => {
   const userId = socket.handshake.query.userId;
   
@@ -35,20 +37,53 @@ io.on('connection', async (socket) => {
     console.log(`User connected: ${userId} with socket ${socket.id}`);
     await User.findByIdAndUpdate(userId, { isOnline: true });
     io.emit('user-online', userId);
-  } else {
-    console.log('Anonymous connected:', socket.id);
   }
 
+  // Normal Room Join
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
+    // Notify others in room so they can initiate WebRTC offer
+    socket.to(roomId).emit('user-joined', socket.id);
+  });
+
+  // Random Matchmaking (Omegle style)
+  socket.on('join-random', () => {
+    if (waitingUser && waitingUser.socketId !== socket.id) {
+      const roomId = 'random-' + Date.now();
+      socket.join(roomId);
+      
+      const partnerSocket = io.sockets.sockets.get(waitingUser.socketId);
+      if (partnerSocket) {
+        partnerSocket.join(roomId);
+        io.to(roomId).emit('match-found', roomId);
+      } else {
+        // Partner disconnected while waiting, put this user in queue
+        waitingUser = { socketId: socket.id, userId };
+        return;
+      }
+      waitingUser = null;
+    } else {
+      waitingUser = { socketId: socket.id, userId };
+    }
+  });
+
+  socket.on('leave-room', (roomId) => {
+    socket.leave(roomId);
+    socket.to(roomId).emit('user-left', socket.id);
+    if (waitingUser && waitingUser.socketId === socket.id) {
+      waitingUser = null;
+    }
   });
 
   socket.on('send-message', async (data) => {
     try {
       const { roomId, senderId, senderName, text, time } = data;
-      const newMessage = await Message.create({ roomId, senderId, senderName, text, time });
-      io.to(roomId).emit('receive-message', newMessage);
+      // Don't save random chat messages to DB
+      if (!roomId.startsWith('random-')) {
+        await Message.create({ roomId, senderId, senderName, text, time });
+      }
+      io.to(roomId).emit('receive-message', { roomId, senderId, senderName, text, time });
     } catch (error) {
       console.error('Error saving message', error);
     }
@@ -56,18 +91,35 @@ io.on('connection', async (socket) => {
 
   // WebRTC Signaling
   socket.on('webrtc-offer', (data) => {
-    socket.to(data.roomId).emit('webrtc-offer', data);
+    socket.to(data.target).emit('webrtc-offer', {
+      sdp: data.sdp,
+      callerId: socket.id
+    });
   });
 
   socket.on('webrtc-answer', (data) => {
-    socket.to(data.roomId).emit('webrtc-answer', data);
+    socket.to(data.target).emit('webrtc-answer', {
+      sdp: data.sdp,
+      answererId: socket.id
+    });
   });
 
   socket.on('webrtc-ice-candidate', (data) => {
-    socket.to(data.roomId).emit('webrtc-ice-candidate', data);
+    socket.to(data.target).emit('webrtc-ice-candidate', {
+      candidate: data.candidate,
+      senderId: socket.id
+    });
   });
 
   socket.on('disconnect', async () => {
+    if (waitingUser && waitingUser.socketId === socket.id) {
+      waitingUser = null;
+    }
+    // Tell all rooms they were in that they left
+    socket.rooms.forEach(roomId => {
+      socket.to(roomId).emit('user-left', socket.id);
+    });
+
     if (userId && userId !== 'undefined') {
       console.log(`User disconnected: ${userId}`);
       await User.findByIdAndUpdate(userId, { isOnline: false });

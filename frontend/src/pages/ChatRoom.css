@@ -56,40 +56,53 @@
 
 .video-grid {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
-  overflow-y: auto;
-}
-
-.video-tile {
+  position: relative;
   background: var(--bg-secondary);
   border-radius: 12px;
-  position: relative;
   overflow: hidden;
-  min-height: 250px;
   border: 1px solid var(--border-light);
 }
 
-.local-video {
-  border-color: var(--accent-primary);
-}
-
-.video-placeholder {
+.remote-video-container {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(15, 23, 42, 0.5);
+}
+
+.local-video-pip {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  width: 180px;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 5;
+  background: black;
+}
+
+.fullscreen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: black;
 }
 
 .participant-label {
   position: absolute;
-  bottom: 1rem;
-  left: 1rem;
+  bottom: 0.5rem;
+  left: 0.5rem;
   background: rgba(0, 0, 0, 0.6);
   padding: 0.25rem 0.75rem;
   border-radius: 6px;
   font-size: 0.875rem;
   backdrop-filter: blur(4px);
+  color: white;
+  z-index: 10;
 }
 
 .video-controls {
@@ -114,7 +127,7 @@
   transition: all var(--transition-fast);
 }
 
-.control-btn:hover {
+.control-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
 }
@@ -122,6 +135,12 @@
 .control-btn.muted {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+.control-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(15, 23, 42, 0.5);
 }
 
 .end-call-btn {
@@ -240,8 +259,10 @@
   .chat-area {
     max-width: 100%;
     flex: 1;
+    min-height: 300px;
   }
   .video-area {
     flex: 1;
+    min-height: 400px;
   }
 }

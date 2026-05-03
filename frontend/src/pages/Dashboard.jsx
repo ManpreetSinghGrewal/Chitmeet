@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Video, MessageSquare, LogOut, Hash } from 'lucide-react';
+import { Search, Video, MessageSquare, LogOut, Hash, Shuffle } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
 import './Dashboard.css';
@@ -9,6 +9,7 @@ import './Dashboard.css';
 const Dashboard = () => {
   const [rooms, setRooms] = useState([]);
   const [onlineFriends, setOnlineFriends] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useContext(AuthContext);
   const socket = useContext(SocketContext);
@@ -25,7 +26,6 @@ const Dashboard = () => {
   const fetchOnlineUsers = async () => {
     try {
       const { data } = await axios.get('http://localhost:5001/api/users/online');
-      // Filter out the current user so they don't see themselves in the online friends list
       setOnlineFriends(data.filter(u => u._id !== user?._id));
     } catch (error) {
       console.error('Error fetching online users', error);
@@ -43,20 +43,29 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (socket) {
-      const handleUserStatusChange = () => {
-        // Simple strategy: refetch the list when anyone comes online or goes offline
-        fetchOnlineUsers();
-      };
-
+      const handleUserStatusChange = () => fetchOnlineUsers();
       socket.on('user-online', handleUserStatusChange);
       socket.on('user-offline', handleUserStatusChange);
+
+      socket.on('match-found', (roomId) => {
+        setIsSearching(false);
+        navigate(`/chat/${roomId}`);
+      });
 
       return () => {
         socket.off('user-online', handleUserStatusChange);
         socket.off('user-offline', handleUserStatusChange);
+        socket.off('match-found');
       };
     }
-  }, [socket, user]);
+  }, [socket, navigate]);
+
+  const handleRandomMatch = () => {
+    if (socket) {
+      setIsSearching(true);
+      socket.emit('join-random');
+    }
+  };
 
   return (
     <div className="dashboard-container">
@@ -113,6 +122,19 @@ const Dashboard = () => {
           </div>
         </header>
 
+        {/* Omegle Feature Banner */}
+        <div className="glass-card" style={{ padding: '2rem', marginBottom: '2rem', background: 'var(--bg-glass-hover)', border: '1px solid var(--accent-primary)' }}>
+          <h3 className="heading-lg" style={{ color: 'var(--accent-primary)', marginBottom: '0.5rem' }}>Omegle Mode</h3>
+          <p className="text-body" style={{ marginBottom: '1.5rem' }}>Connect with a random student instantly. Video and Mic are enabled!</p>
+          <button 
+            className="btn btn-primary btn-lg" 
+            onClick={handleRandomMatch}
+            disabled={isSearching}
+          >
+            {isSearching ? 'Searching for a partner...' : <><Shuffle size={20} /> Connect Randomly</>}
+          </button>
+        </div>
+
         <div className="rooms-grid">
           {rooms.map(room => (
             <div key={room._id} className="glass-card room-card">
@@ -123,9 +145,10 @@ const Dashboard = () => {
                 <span className="badge">{room.activeUsers || 0} online</span>
               </div>
               <h3 className="heading-md room-title">{room.name}</h3>
+              <p className="text-small" style={{ marginBottom: '1rem', color: '#ef4444' }}>NO MIC ALLOWED</p>
               <div className="room-types">
                 {(room.type === 'video' || room.type === 'both') && (
-                  <span className="type-indicator"><Video size={14} /> Video</span>
+                  <span className="type-indicator"><Video size={14} /> Cam</span>
                 )}
                 {(room.type === 'text' || room.type === 'both') && (
                   <span className="type-indicator"><MessageSquare size={14} /> Text</span>

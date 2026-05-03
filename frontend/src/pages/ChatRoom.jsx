@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, Send, Smile, Paperclip } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Video, VideoOff, PhoneOff, Send, Smile, Paperclip, FastForward } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
 import './ChatRoom.css';
@@ -18,38 +18,177 @@ const ChatRoom = () => {
   const [messages, setMessages] = useState([]);
   
   const messagesEndRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const peerConnectionRef = useRef(null);
+  const localStreamRef = useRef(null);
+
+  const isOmegleMode = roomId.startsWith('random-');
+  const noMicRooms = ['gaming', 'study'];
+  const enforceNoMic = noMicRooms.includes(roomId);
 
   useEffect(() => {
     if (!user) navigate('/auth');
   }, [user, navigate]);
 
+  // Fetch messages if it's a permanent room
   useEffect(() => {
-    const fetchMessages = async () => {
+    if (!isOmegleMode) {
+      const fetchMessages = async () => {
+        try {
+          const { data } = await axios.get(`http://localhost:5001/api/rooms/${roomId}/messages`);
+          setMessages(data);
+          scrollToBottom();
+        } catch (error) {
+          console.error('Error fetching messages', error);
+        }
+      };
+      fetchMessages();
+    }
+  }, [roomId, isOmegleMode]);
+
+  // WebRTC & Socket setup
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    // Configuration for WebRTC
+    const rtcConfig = {
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    };
+
+    const initializeMedia = async () => {
       try {
-        const { data } = await axios.get(`http://localhost:5001/api/rooms/${roomId}/messages`);
-        setMessages(data);
-        scrollToBottom();
-      } catch (error) {
-        console.error('Error fetching messages', error);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localStreamRef.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        // Force disable mic in specific rooms
+        if (enforceNoMic) {
+          stream.getAudioTracks().forEach(track => track.enabled = false);
+          setIsAudioMuted(true);
+        }
+
+        socket.emit('join-room', roomId);
+      } catch (err) {
+        console.error('Error accessing media devices', err);
+        socket.emit('join-room', roomId); // join even without cam
       }
     };
-    fetchMessages();
-  }, [roomId]);
 
-  useEffect(() => {
-    if (socket) {
-      socket.emit('join-room', roomId);
+    initializeMedia();
 
-      socket.on('receive-message', (newMessage) => {
-        setMessages((prev) => [...prev, newMessage]);
-        scrollToBottom();
-      });
+    // 1. Another user joined, initiate connection
+    socket.on('user-joined', async (peerId) => {
+      console.log('User joined, initiating WebRTC connection', peerId);
+      const peerConnection = new RTCPeerConnection(rtcConfig);
+      peerConnectionRef.current = peerConnection;
 
-      return () => {
-        socket.off('receive-message');
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStreamRef.current);
+        });
+      }
+
+      peerConnection.ontrack = (event) => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
       };
-    }
-  }, [socket, roomId]);
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('webrtc-ice-candidate', { target: peerId, candidate: event.candidate });
+        }
+      };
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      socket.emit('webrtc-offer', { target: peerId, sdp: offer });
+    });
+
+    // 2. Received offer, create answer
+    socket.on('webrtc-offer', async (data) => {
+      console.log('Received offer');
+      const peerConnection = new RTCPeerConnection(rtcConfig);
+      peerConnectionRef.current = peerConnection;
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStreamRef.current);
+        });
+      }
+
+      peerConnection.ontrack = (event) => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('webrtc-ice-candidate', { target: data.callerId, candidate: event.candidate });
+        }
+      };
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit('webrtc-answer', { target: data.callerId, sdp: answer });
+    });
+
+    // 3. Received answer
+    socket.on('webrtc-answer', async (data) => {
+      console.log('Received answer');
+      if (peerConnectionRef.current) {
+        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      }
+    });
+
+    // 4. Received ICE candidate
+    socket.on('webrtc-ice-candidate', async (data) => {
+      if (peerConnectionRef.current) {
+        try {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (e) {
+          console.error('Error adding received ice candidate', e);
+        }
+      }
+    });
+
+    socket.on('receive-message', (newMessage) => {
+      setMessages((prev) => [...prev, newMessage]);
+      scrollToBottom();
+    });
+
+    socket.on('user-left', () => {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+    });
+
+    return () => {
+      socket.emit('leave-room', roomId);
+      socket.off('user-joined');
+      socket.off('webrtc-offer');
+      socket.off('webrtc-answer');
+      socket.off('webrtc-ice-candidate');
+      socket.off('receive-message');
+      socket.off('user-left');
+      
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+    };
+  }, [socket, roomId, user, enforceNoMic]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -72,7 +211,36 @@ const ChatRoom = () => {
     };
 
     socket.emit('send-message', messageData);
+    setMessages((prev) => [...prev, messageData]); // Optimistic update for sender
     setMessage('');
+    scrollToBottom();
+  };
+
+  const toggleAudio = () => {
+    if (enforceNoMic) return; // Prevent unmuting
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsAudioMuted(!audioTrack.enabled);
+      }
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoMuted(!videoTrack.enabled);
+      }
+    }
+  };
+
+  const handleNextPerson = () => {
+    // Leave current Omegle room and go back to dashboard to queue again
+    socket.emit('leave-room', roomId);
+    navigate('/dashboard');
   };
 
   return (
@@ -83,33 +251,60 @@ const ChatRoom = () => {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h2 className="heading-md">Room: {roomId}</h2>
+            <h2 className="heading-md">
+              {isOmegleMode ? 'Omegle Random Match' : `Room: ${roomId}`}
+            </h2>
+            {enforceNoMic && <p className="text-small" style={{ color: '#ef4444' }}>Microphone is forcibly disabled in this room.</p>}
           </div>
         </div>
+        
+        {isOmegleMode && (
+          <button className="btn btn-secondary" onClick={handleNextPerson}>
+            <FastForward size={16} /> Next Person
+          </button>
+        )}
       </header>
 
       <div className="chatroom-body">
         {/* Video Area */}
         <div className="video-area">
           <div className="video-grid">
-            <div className="video-tile local-video">
-              <div className="video-placeholder flex-center">
-                <Video size={48} color="var(--text-muted)" />
-              </div>
+            {/* Remote Video */}
+            <div className="video-tile remote-video-container">
+              <video 
+                ref={remoteVideoRef} 
+                autoPlay 
+                playsInline 
+                className="fullscreen-video"
+              ></video>
+              <div className="participant-label">Partner</div>
+            </div>
+
+            {/* Local Video (Picture in Picture style) */}
+            <div className="video-tile local-video-pip">
+              <video 
+                ref={localVideoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                className="fullscreen-video"
+              ></video>
               <div className="participant-label">You</div>
             </div>
           </div>
 
           <div className="video-controls glass-panel flex-center">
             <button 
-              className={`control-btn ${isAudioMuted ? 'muted' : ''}`}
-              onClick={() => setIsAudioMuted(!isAudioMuted)}
+              className={`control-btn ${isAudioMuted ? 'muted' : ''} ${enforceNoMic ? 'disabled' : ''}`}
+              onClick={toggleAudio}
+              disabled={enforceNoMic}
+              title={enforceNoMic ? "Mic disabled in this room" : "Toggle Mic"}
             >
-              {isAudioMuted ? <MicOff size={20} /> : <Mic size={20} />}
+              {isAudioMuted || enforceNoMic ? <MicOff size={20} /> : <Mic size={20} />}
             </button>
             <button 
               className={`control-btn ${isVideoMuted ? 'muted' : ''}`}
-              onClick={() => setIsVideoMuted(!isVideoMuted)}
+              onClick={toggleVideo}
             >
               {isVideoMuted ? <VideoOff size={20} /> : <Video size={20} />}
             </button>
