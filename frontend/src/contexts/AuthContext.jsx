@@ -41,6 +41,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateProfile = async (name, hostelBlock) => {
+    try {
+      const { data } = await axios.put(`${API_URL}/api/users/${user._id}/profile`, { name, hostelBlock });
+      // Keep token if existing
+      const updatedUser = { ...user, name: data.name, hostelBlock: data.hostelBlock };
+      setUser(updatedUser);
+      localStorage.setItem('userInfo', JSON.stringify(updatedUser));
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Update failed' };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('userInfo');
     setUser(null);
@@ -48,7 +61,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

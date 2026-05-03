@@ -84,4 +84,29 @@ const acceptFriendRequest = async (req, res) => {
   }
 };
 
-module.exports = { getOnlineUsers, getOnlineCount, getFriends, sendFriendRequest, acceptFriendRequest };
+const updateProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { name, hostelBlock } = req.body;
+    
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    if (name) user.name = name;
+    if (hostelBlock) user.hostelBlock = hostelBlock;
+    
+    await user.save();
+    
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      hostelBlock: user.hostelBlock,
+      token: req.headers.authorization?.split(' ')[1] // usually frontend handles token, this is just info
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getOnlineUsers, getOnlineCount, getFriends, sendFriendRequest, acceptFriendRequest, updateProfile };

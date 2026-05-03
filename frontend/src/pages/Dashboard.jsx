@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Video, MessageSquare, LogOut, Hash, Shuffle, Check, Home, Users, Layout, MicOff, Gamepad2, BookOpen, ShieldCheck, ChevronDown, Grid, List } from 'lucide-react';
+import { Search, Video, MessageSquare, LogOut, Hash, Shuffle, Check, Home, Users, Layout, MicOff, Gamepad2, BookOpen, ShieldCheck, ChevronDown, Grid, List, Edit2, X } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
 import './Dashboard.css';
@@ -14,8 +14,13 @@ const Dashboard = () => {
   const [friendRequests, setFriendRequests] = useState([]);
   const [onlineCount, setOnlineCount] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editHostel, setEditHostel] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  
   const navigate = useNavigate();
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, updateProfile } = useContext(AuthContext);
   const socket = useContext(SocketContext);
 
   const fetchData = async () => {
@@ -85,6 +90,24 @@ const Dashboard = () => {
     }
   };
 
+  const openEditProfile = () => {
+    setEditName(user?.name || '');
+    setEditHostel(user?.hostelBlock || '');
+    setIsEditProfileOpen(true);
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    setIsUpdating(true);
+    const res = await updateProfile(editName, editHostel);
+    setIsUpdating(false);
+    if (res.success) {
+      setIsEditProfileOpen(false);
+    } else {
+      alert(res.message);
+    }
+  };
+
   return (
     <div className="dashboard-container">
       <aside className="sidebar">
@@ -106,13 +129,18 @@ const Dashboard = () => {
             </li>
           </ul>
 
-          <h4 className="nav-title mt-4">PROFILE</h4>
-          <div className="profile-section">
-            <p className="text-body" style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{user?.name || 'mani2'}</p>
-            <p className="text-small text-muted mb-2">{user?.hostelBlock || 'FA'}</p>
+          <div className="flex-between mt-4">
+            <h4 className="nav-title" style={{ margin: 0 }}>PROFILE</h4>
+            <button className="icon-btn" onClick={openEditProfile} title="Edit Profile">
+              <Edit2 size={14} />
+            </button>
+          </div>
+          <div className="profile-section" style={{ marginTop: '0.5rem' }}>
+            <p className="text-body" style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{user?.name}</p>
+            <p className="text-small text-muted mb-2">{user?.hostelBlock}</p>
             <div className="online-badge">
               <div className="online-indicator-dot"></div>
-              {onlineCount} User Online
+              {onlineCount} User{onlineCount !== 1 ? 's' : ''} Online
             </div>
           </div>
 
@@ -143,9 +171,46 @@ const Dashboard = () => {
       </aside>
 
       <main className="dashboard-main">
+        {/* Edit Profile Modal */}
+        {isEditProfileOpen && (
+          <div className="modal-overlay flex-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100 }}>
+            <div className="glass-card" style={{ width: '400px', padding: '2rem', position: 'relative' }}>
+              <button className="icon-btn" style={{ position: 'absolute', top: '1rem', right: '1rem' }} onClick={() => setIsEditProfileOpen(false)}>
+                <X size={20} />
+              </button>
+              <h2 className="heading-lg mb-4">Edit Profile</h2>
+              <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <label className="text-small text-muted" style={{ display: 'block', marginBottom: '0.5rem' }}>Display Name</label>
+                  <input 
+                    type="text" 
+                    className="input-field w-100" 
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-small text-muted" style={{ display: 'block', marginBottom: '0.5rem' }}>Hostel Block</label>
+                  <input 
+                    type="text" 
+                    className="input-field w-100" 
+                    value={editHostel}
+                    onChange={(e) => setEditHostel(e.target.value)}
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary mt-4" disabled={isUpdating}>
+                  {isUpdating ? 'Saving...' : 'Save Changes'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
         <header className="dashboard-header flex-between">
           <div>
-            <h2 className="heading-lg">Welcome back, {user?.name || 'mani2'}</h2>
+            <h2 className="heading-lg">Welcome back, {user?.name}</h2>
             <p className="text-body">Connect and collaborate with people around you.</p>
           </div>
           
