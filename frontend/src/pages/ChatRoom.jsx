@@ -53,9 +53,13 @@ const ChatRoom = () => {
   useEffect(() => {
     if (!socket || !user) return;
 
-    // Configuration for WebRTC
+    // Multiple STUN servers for better NAT traversal
     const rtcConfig = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' },
+        { urls: 'stun:stun.services.mozilla.com' }
+      ]
     };
 
     const initializeMedia = async () => {
@@ -68,18 +72,37 @@ const ChatRoom = () => {
 
         // Force disable mic in specific rooms
         if (enforceNoMic) {
-          stream.getAudioTracks().forEach(track => track.enabled = false);
+          stream.getAudioTracks().forEach(track => {
+            track.enabled = false;
+          });
           setIsAudioMuted(true);
         }
 
         socket.emit('join-room', roomId);
       } catch (err) {
         console.error('Error accessing media devices', err);
+        alert('Could not access camera/microphone. Please check permissions.');
         socket.emit('join-room', roomId); // join even without cam
       }
     };
 
     initializeMedia();
+
+    const handleTrackEvent = (event) => {
+      if (remoteVideoRef.current) {
+        if (event.streams && event.streams[0]) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        } else {
+          // Fallback for some browsers
+          let stream = remoteVideoRef.current.srcObject;
+          if (!stream) {
+            stream = new MediaStream();
+            remoteVideoRef.current.srcObject = stream;
+          }
+          stream.addTrack(event.track);
+        }
+      }
+    };
 
     // 1. Another user joined, initiate connection
     socket.on('user-joined', async (peerId) => {
@@ -93,11 +116,7 @@ const ChatRoom = () => {
         });
       }
 
-      peerConnection.ontrack = (event) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
+      peerConnection.ontrack = handleTrackEvent;
 
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
@@ -105,9 +124,13 @@ const ChatRoom = () => {
         }
       };
 
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      socket.emit('webrtc-offer', { target: peerId, sdp: offer });
+      try {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('webrtc-offer', { target: peerId, sdp: offer });
+      } catch (e) {
+        console.error('Error creating offer', e);
+      }
     });
 
     // 2. Received offer, create answer
@@ -122,11 +145,7 @@ const ChatRoom = () => {
         });
       }
 
-      peerConnection.ontrack = (event) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
+      peerConnection.ontrack = handleTrackEvent;
 
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
@@ -134,17 +153,25 @@ const ChatRoom = () => {
         }
       };
 
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit('webrtc-answer', { target: data.callerId, sdp: answer });
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('webrtc-answer', { target: data.callerId, sdp: answer });
+      } catch (e) {
+        console.error('Error handling offer and creating answer', e);
+      }
     });
 
     // 3. Received answer
     socket.on('webrtc-answer', async (data) => {
       console.log('Received answer');
       if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        } catch (e) {
+          console.error('Error setting remote description from answer', e);
+        }
       }
     });
 
@@ -160,11 +187,18 @@ const ChatRoom = () => {
     });
 
     socket.on('receive-message', (newMessage) => {
-      setMessages((prev) => [...prev, newMessage]);
+      setMessages((prev) => {
+        // Prevent duplicate messages if somehow received twice
+        if (prev.some(msg => msg._id === newMessage._id || (msg.time === newMessage.time && msg.text === newMessage.text))) {
+          return prev;
+        }
+        return [...prev, newMessage];
+      });
       scrollToBottom();
     });
 
     socket.on('user-left', () => {
+      console.log('User left the room');
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = null;
       }
@@ -213,7 +247,7 @@ const ChatRoom = () => {
     };
 
     socket.emit('send-message', messageData);
-    setMessages((prev) => [...prev, messageData]); // Optimistic update for sender
+    // Removed the optimistic update so the message only appears once when received from the server
     setMessage('');
     scrollToBottom();
   };
@@ -240,7 +274,6 @@ const ChatRoom = () => {
   };
 
   const handleNextPerson = () => {
-    // Leave current Omegle room and go back to dashboard to queue again
     socket.emit('leave-room', roomId);
     navigate('/dashboard');
   };
