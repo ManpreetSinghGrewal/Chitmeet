@@ -51,12 +51,13 @@ io.on('connection', async (socket) => {
   socket.on('join-random', () => {
     if (waitingUser && waitingUser.socketId !== socket.id) {
       const roomId = 'random-' + Date.now();
-      socket.join(roomId);
       
       const partnerSocket = io.sockets.sockets.get(waitingUser.socketId);
       if (partnerSocket) {
-        partnerSocket.join(roomId);
-        io.to(roomId).emit('match-found', roomId);
+        // Send match individually so they join via ChatRoom explicitly. 
+        // This prevents the WebRTC "Glare" (double offer) bug!
+        socket.emit('match-found', roomId);
+        partnerSocket.emit('match-found', roomId);
       } else {
         // Partner disconnected while waiting, put this user in queue
         waitingUser = { socketId: socket.id, userId };
