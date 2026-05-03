@@ -129,6 +129,9 @@ const Dashboard = () => {
                 </div>
               </li>
             ))}
+            {friends.length === 0 && (
+              <p className="text-small text-muted">You haven't added any friends yet. Meet people in Chitmeet Random Mode!</p>
+            )}
           </ul>
         </div>
 
@@ -160,7 +163,7 @@ const Dashboard = () => {
             </div>
             <div>
               <div className="flex-center" style={{ justifyContent: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
-                <h3 className="heading-md" style={{ margin: 0 }}>Random Match</h3>
+                <h3 className="heading-md" style={{ margin: 0 }}>Chitmeet Random Match</h3>
                 <span className="badge badge-purple">Instant</span>
               </div>
               <p className="text-small" style={{ color: 'rgba(255, 255, 255, 0.8)' }}>

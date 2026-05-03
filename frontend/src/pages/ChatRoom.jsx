@@ -363,7 +363,8 @@ const ChatRoom = () => {
   };
 
   // Video Grid layout calculation
-  const totalVideos = remoteStreams.length + 1; // Remotes + 1 Local
+  // In Random match mode, local video is PiP, so it doesn't take up a grid slot!
+  const totalVideos = isOmegleMode ? Math.max(1, remoteStreams.length) : remoteStreams.length + 1; 
   let gridClass = 'grid-1';
   if (totalVideos === 2) gridClass = 'grid-2';
   else if (totalVideos >= 3 && totalVideos <= 4) gridClass = 'grid-4';
@@ -379,7 +380,7 @@ const ChatRoom = () => {
           </button>
           <div>
             <h2 className="heading-md">
-              {isOmegleMode ? 'Omegle Random Match' : `Room: ${roomId}`}
+              {isOmegleMode ? 'Chitmeet Random Match' : `Room: ${roomId}`}
             </h2>
             <p className="text-small" style={{ color: connectionStatus === 'Connected!' ? '#10b981' : '#f59e0b' }}>
               {connectionStatus}
