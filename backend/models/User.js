@@ -6,7 +6,9 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   hostelBlock: { type: String, required: true },
-  isOnline: { type: Boolean, default: false }
+  isOnline: { type: Boolean, default: false },
+  friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 }, { timestamps: true });
 
 userSchema.pre('save', async function() {

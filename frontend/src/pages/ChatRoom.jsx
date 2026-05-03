@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Mic, MicOff, Video, VideoOff, PhoneOff, Send, Smile, Paperclip, FastForward } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Video, VideoOff, PhoneOff, Send, Smile, Paperclip, FastForward, UserPlus } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
 import './ChatRoom.css';
@@ -11,6 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 const ChatRoom = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useContext(AuthContext);
   const socket = useContext(SocketContext);
   
@@ -18,14 +19,21 @@ const ChatRoom = () => {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState('Waiting for partner...');
+  const [connectionStatus, setConnectionStatus] = useState('Waiting for others...');
+  const [remoteStreams, setRemoteStreams] = useState([]); // [{ peerId, stream }]
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
+
+  // Omegle specific partner ID
+  const partnerUserId = location.state?.partnerUserId || null;
   
   const messagesEndRef = useRef(null);
   const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-  const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
-  const iceCandidateBuffer = useRef([]);
+  
+  // Maps peerId -> RTCPeerConnection
+  const peerConnectionsRef = useRef(new Map());
+  // Maps peerId -> ICE Candidate Buffer
+  const iceCandidateBuffers = useRef(new Map());
 
   const isOmegleMode = roomId.startsWith('random-');
   const noMicRooms = ['gaming', 'study'];
@@ -35,9 +43,11 @@ const ChatRoom = () => {
     if (!user) navigate('/auth');
   }, [user, navigate]);
 
-  // Fetch messages if it's a permanent room
+  // Fetch messages if it's a permanent room, clear if random
   useEffect(() => {
-    if (!isOmegleMode) {
+    if (isOmegleMode) {
+      setMessages([]); // Clear chat every time a new random room is joined
+    } else {
       const fetchMessages = async () => {
         try {
           const { data } = await axios.get(`${API_URL}/api/rooms/${roomId}/messages`);
@@ -55,7 +65,6 @@ const ChatRoom = () => {
   useEffect(() => {
     if (!socket || !user) return;
 
-    // Multiple STUN and free TURN servers for absolute NAT traversal
     const rtcConfig = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -94,39 +103,37 @@ const ChatRoom = () => {
           setIsAudioMuted(true);
         }
 
-        setConnectionStatus('Waiting for partner...');
-        socket.emit('join-room', roomId);
+        setConnectionStatus('Waiting for others...');
+        socket.emit('join-room', { roomId, userId: user._id });
       } catch (err) {
         console.error('Error accessing media devices', err);
         setConnectionStatus('Camera access denied');
         alert('Could not access camera/microphone. Please check browser permissions.');
-        socket.emit('join-room', roomId); 
+        socket.emit('join-room', { roomId, userId: user._id }); 
       }
     };
 
     initializeMedia();
 
-    const handleTrackEvent = (event) => {
-      console.log('Received remote track', event);
-      if (remoteVideoRef.current) {
-        if (event.streams && event.streams[0]) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        } else {
-          let stream = remoteVideoRef.current.srcObject;
-          if (!stream) {
-            stream = new MediaStream();
-            remoteVideoRef.current.srcObject = stream;
-          }
-          stream.addTrack(event.track);
+    const handleTrackEvent = (event, peerId) => {
+      console.log('Received remote track from', peerId);
+      const incomingStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+      
+      setRemoteStreams(prev => {
+        const exists = prev.find(p => p.peerId === peerId);
+        if (exists) {
+          // Update stream if needed, though usually same stream object
+          return prev;
         }
-        
-        remoteVideoRef.current.play().catch(e => console.warn('Autoplay prevented:', e));
-      }
+        return [...prev, { peerId, stream: incomingStream }];
+      });
+      setConnectionStatus('Connected!');
     };
 
-    const flushIceCandidateBuffer = async (pc) => {
-      while (iceCandidateBuffer.current.length > 0) {
-        const candidate = iceCandidateBuffer.current.shift();
+    const flushIceCandidateBuffer = async (pc, peerId) => {
+      const buffer = iceCandidateBuffers.current.get(peerId) || [];
+      while (buffer.length > 0) {
+        const candidate = buffer.shift();
         try {
           await pc.addIceCandidate(candidate);
         } catch (e) {
@@ -136,7 +143,7 @@ const ChatRoom = () => {
     };
 
     const setupPeerConnectionEvents = (pc, peerIdTarget) => {
-      pc.ontrack = handleTrackEvent;
+      pc.ontrack = (event) => handleTrackEvent(event, peerIdTarget);
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -145,36 +152,44 @@ const ChatRoom = () => {
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log('ICE Connection State:', pc.iceConnectionState);
-        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          setConnectionStatus('Connected!');
-        } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-          setConnectionStatus('Connection failed (Firewall/NAT)');
-        } else if (pc.iceConnectionState === 'checking') {
-          setConnectionStatus('Connecting to partner...');
+        console.log(`ICE Connection State [${peerIdTarget}]:`, pc.iceConnectionState);
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          // Remove remote stream on failure
+          setRemoteStreams(prev => prev.filter(p => p.peerId !== peerIdTarget));
+          pc.close();
+          peerConnectionsRef.current.delete(peerIdTarget);
         }
       };
     };
 
-    // 1. Another user joined, initiate connection
-    socket.on('user-joined', async (peerId) => {
-      console.log('User joined, initiating WebRTC connection', peerId);
-      setConnectionStatus('Partner found, connecting...');
-      
-      const peerConnection = new RTCPeerConnection(rtcConfig);
-      peerConnectionRef.current = peerConnection;
+    const createPeerConnection = (peerId) => {
+      const pc = new RTCPeerConnection(rtcConfig);
+      peerConnectionsRef.current.set(peerId, pc);
+      if (!iceCandidateBuffers.current.has(peerId)) {
+        iceCandidateBuffers.current.set(peerId, []);
+      }
 
-      setupPeerConnectionEvents(peerConnection, peerId);
+      setupPeerConnectionEvents(pc, peerId);
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStreamRef.current);
+          pc.addTrack(track, localStreamRef.current);
         });
       }
+      return pc;
+    };
+
+    // 1. Another user joined, initiate connection
+    socket.on('user-joined', async (data) => {
+      const { socketId: peerId } = data;
+      console.log('User joined, initiating WebRTC connection', peerId);
+      setConnectionStatus('Peer joining...');
+      
+      const pc = createPeerConnection(peerId);
 
       try {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
         socket.emit('webrtc-offer', { target: peerId, sdp: offer });
       } catch (e) {
         console.error('Error creating offer', e);
@@ -183,27 +198,19 @@ const ChatRoom = () => {
 
     // 2. Received offer, create answer
     socket.on('webrtc-offer', async (data) => {
-      console.log('Received offer');
+      const peerId = data.callerId;
+      console.log('Received offer from', peerId);
       setConnectionStatus('Receiving connection...');
       
-      const peerConnection = new RTCPeerConnection(rtcConfig);
-      peerConnectionRef.current = peerConnection;
-
-      setupPeerConnectionEvents(peerConnection, data.callerId);
-
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStreamRef.current);
-        });
-      }
+      const pc = createPeerConnection(peerId);
 
       try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        await flushIceCandidateBuffer(peerConnection);
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        await flushIceCandidateBuffer(pc, peerId);
         
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        socket.emit('webrtc-answer', { target: data.callerId, sdp: answer });
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('webrtc-answer', { target: peerId, sdp: answer });
       } catch (e) {
         console.error('Error handling offer and creating answer', e);
       }
@@ -211,11 +218,13 @@ const ChatRoom = () => {
 
     // 3. Received answer
     socket.on('webrtc-answer', async (data) => {
-      console.log('Received answer');
-      if (peerConnectionRef.current) {
+      const peerId = data.answererId;
+      console.log('Received answer from', peerId);
+      const pc = peerConnectionsRef.current.get(peerId);
+      if (pc) {
         try {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          await flushIceCandidateBuffer(peerConnectionRef.current);
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          await flushIceCandidateBuffer(pc, peerId);
         } catch (e) {
           console.error('Error setting remote description from answer', e);
         }
@@ -224,15 +233,21 @@ const ChatRoom = () => {
 
     // 4. Received ICE candidate
     socket.on('webrtc-ice-candidate', async (data) => {
+      const peerId = data.senderId;
       const candidate = new RTCIceCandidate(data.candidate);
-      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+      const pc = peerConnectionsRef.current.get(peerId);
+      
+      if (pc && pc.remoteDescription) {
         try {
-          await peerConnectionRef.current.addIceCandidate(candidate);
+          await pc.addIceCandidate(candidate);
         } catch (e) {
           console.error('Error adding received ice candidate', e);
         }
       } else {
-        iceCandidateBuffer.current.push(candidate);
+        if (!iceCandidateBuffers.current.has(peerId)) {
+          iceCandidateBuffers.current.set(peerId, []);
+        }
+        iceCandidateBuffers.current.get(peerId).push(candidate);
       }
     });
 
@@ -246,16 +261,21 @@ const ChatRoom = () => {
       scrollToBottom();
     });
 
-    socket.on('user-left', () => {
-      console.log('User left the room');
-      setConnectionStatus('Partner left the room');
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = null;
+    socket.on('user-left', (peerId) => {
+      console.log('User left the room', peerId);
+      
+      setRemoteStreams(prev => {
+        const remaining = prev.filter(p => p.peerId !== peerId);
+        if (remaining.length === 0) setConnectionStatus('Waiting for others...');
+        return remaining;
+      });
+
+      const pc = peerConnectionsRef.current.get(peerId);
+      if (pc) {
+        pc.close();
+        peerConnectionsRef.current.delete(peerId);
       }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
+      iceCandidateBuffers.current.delete(peerId);
     });
 
     return () => {
@@ -270,9 +290,10 @@ const ChatRoom = () => {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
+      
+      peerConnectionsRef.current.forEach(pc => pc.close());
+      peerConnectionsRef.current.clear();
+      iceCandidateBuffers.current.clear();
     };
   }, [socket, roomId, user, enforceNoMic]);
 
@@ -327,6 +348,28 @@ const ChatRoom = () => {
     navigate('/dashboard');
   };
 
+  const handleSendFriendRequest = async () => {
+    if (!partnerUserId) return;
+    try {
+      await axios.post(`${API_URL}/api/users/friend-request`, {
+        fromUserId: user._id,
+        toUserId: partnerUserId
+      });
+      setFriendRequestSent(true);
+      alert('Friend request sent!');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error sending request');
+    }
+  };
+
+  // Video Grid layout calculation
+  const totalVideos = remoteStreams.length + 1; // Remotes + 1 Local
+  let gridClass = 'grid-1';
+  if (totalVideos === 2) gridClass = 'grid-2';
+  else if (totalVideos >= 3 && totalVideos <= 4) gridClass = 'grid-4';
+  else if (totalVideos >= 5 && totalVideos <= 6) gridClass = 'grid-6';
+  else if (totalVideos >= 7) gridClass = 'grid-9';
+
   return (
     <div className="chatroom-container">
       <header className="chatroom-header flex-between glass-panel">
@@ -346,29 +389,49 @@ const ChatRoom = () => {
         </div>
         
         {isOmegleMode && (
-          <button className="btn btn-secondary" onClick={handleNextPerson}>
-            <FastForward size={16} /> Next Person
-          </button>
+          <div className="flex-center" style={{ gap: '1rem' }}>
+            {partnerUserId && (
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleSendFriendRequest}
+                disabled={friendRequestSent}
+                style={{ background: friendRequestSent ? '#10b981' : '', color: friendRequestSent ? 'white' : '' }}
+              >
+                <UserPlus size={16} /> {friendRequestSent ? 'Request Sent' : 'Add Friend'}
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={handleNextPerson}>
+              <FastForward size={16} /> Next Person
+            </button>
+          </div>
         )}
       </header>
 
       <div className="chatroom-body">
         {/* Video Area */}
         <div className="video-area">
-          <div className="video-grid">
-            {/* Remote Video */}
-            <div className="video-tile remote-video-container">
-              <video 
-                ref={remoteVideoRef} 
-                autoPlay 
-                playsInline 
-                className="fullscreen-video"
-              ></video>
-              <div className="participant-label">Partner</div>
-            </div>
+          <div className={`video-grid ${gridClass}`}>
+            
+            {/* Render all remote streams */}
+            {remoteStreams.map((remote) => (
+              <div key={remote.peerId} className="video-tile">
+                <video 
+                  autoPlay 
+                  playsInline 
+                  className="fullscreen-video"
+                  ref={el => {
+                    if (el && el.srcObject !== remote.stream) {
+                      el.srcObject = remote.stream;
+                      el.play().catch(e => console.warn('Play prevented:', e));
+                    }
+                  }}
+                ></video>
+                <div className="participant-label">Partner</div>
+              </div>
+            ))}
 
-            {/* Local Video (Picture in Picture style) */}
-            <div className="video-tile local-video-pip">
+            {/* Local Video */}
+            <div className={`video-tile ${remoteStreams.length > 0 && isOmegleMode ? 'local-video-pip' : ''}`}>
               <video 
                 ref={localVideoRef} 
                 autoPlay 

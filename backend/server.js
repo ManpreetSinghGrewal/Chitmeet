@@ -40,24 +40,27 @@ io.on('connection', async (socket) => {
   }
 
   // Normal Room Join
-  socket.on('join-room', (roomId) => {
+  socket.on('join-room', (data) => {
+    // Support legacy string or new object
+    const roomId = typeof data === 'string' ? data : data.roomId;
+    const roomUserId = typeof data === 'string' ? null : data.userId;
+    
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
     // Notify others in room so they can initiate WebRTC offer
-    socket.to(roomId).emit('user-joined', socket.id);
+    socket.to(roomId).emit('user-joined', { socketId: socket.id, userId: roomUserId });
   });
 
   // Random Matchmaking (Omegle style)
   socket.on('join-random', () => {
     if (waitingUser && waitingUser.socketId !== socket.id) {
       const roomId = 'random-' + Date.now();
-
+      
       const partnerSocket = io.sockets.sockets.get(waitingUser.socketId);
       if (partnerSocket) {
         // Send match individually so they join via ChatRoom explicitly. 
-        // This prevents the WebRTC "Glare" (double offer) bug!
-        socket.emit('match-found', roomId);
-        partnerSocket.emit('match-found', roomId);
+        socket.emit('match-found', { roomId, partnerUserId: waitingUser.userId });
+        partnerSocket.emit('match-found', { roomId, partnerUserId: userId });
       } else {
         // Partner disconnected while waiting, put this user in queue
         waitingUser = { socketId: socket.id, userId };

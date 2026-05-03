@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Video, MessageSquare, LogOut, Hash, Shuffle } from 'lucide-react';
+import { Search, Video, MessageSquare, LogOut, Hash, Shuffle, Check, UserPlus } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
 import './Dashboard.css';
@@ -10,27 +10,30 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 const Dashboard = () => {
   const [rooms, setRooms] = useState([]);
-  const [onlineFriends, setOnlineFriends] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [friendRequests, setFriendRequests] = useState([]);
+  const [onlineCount, setOnlineCount] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useContext(AuthContext);
   const socket = useContext(SocketContext);
 
-  const fetchRooms = async () => {
+  const fetchData = async () => {
     try {
-      const { data } = await axios.get(`${API_URL}/api/rooms`);
-      setRooms(data);
+      if (!user) return;
+      
+      const [roomsRes, countRes, friendsRes] = await Promise.all([
+        axios.get(`${API_URL}/api/rooms`),
+        axios.get(`${API_URL}/api/users/online-count`),
+        axios.get(`${API_URL}/api/users/${user._id}/friends`)
+      ]);
+      
+      setRooms(roomsRes.data);
+      setOnlineCount(countRes.data.count);
+      setFriends(friendsRes.data.friends || []);
+      setFriendRequests(friendsRes.data.friendRequests || []);
     } catch (error) {
-      console.error('Error fetching rooms', error);
-    }
-  };
-
-  const fetchOnlineUsers = async () => {
-    try {
-      const { data } = await axios.get(`${API_URL}/api/users/online`);
-      setOnlineFriends(data.filter(u => u._id !== user?._id));
-    } catch (error) {
-      console.error('Error fetching online users', error);
+      console.error('Error fetching data', error);
     }
   };
 
@@ -39,19 +42,19 @@ const Dashboard = () => {
       navigate('/auth');
       return;
     }
-    fetchRooms();
-    fetchOnlineUsers();
+    fetchData();
   }, [user, navigate]);
 
   useEffect(() => {
     if (socket) {
-      const handleUserStatusChange = () => fetchOnlineUsers();
+      const handleUserStatusChange = () => fetchData();
       socket.on('user-online', handleUserStatusChange);
       socket.on('user-offline', handleUserStatusChange);
 
-      socket.on('match-found', (roomId) => {
+      socket.on('match-found', (data) => {
         setIsSearching(false);
-        navigate(`/chat/${roomId}`);
+        // data contains roomId and partnerUserId
+        navigate(`/chat/${data.roomId}`, { state: { partnerUserId: data.partnerUserId } });
       });
 
       return () => {
@@ -69,6 +72,19 @@ const Dashboard = () => {
     }
   };
 
+  const acceptRequest = async (fromUserId) => {
+    try {
+      await axios.post(`${API_URL}/api/users/friend-request/accept`, {
+        userId: user._id,
+        fromUserId
+      });
+      fetchData(); // Refresh lists
+    } catch (error) {
+      console.error('Error accepting friend request', error);
+      alert('Could not accept request');
+    }
+  };
+
   return (
     <div className="dashboard-container">
       <aside className="glass-panel sidebar">
@@ -79,27 +95,55 @@ const Dashboard = () => {
 
         <div className="sidebar-nav">
           <h4 className="nav-title">Profile</h4>
-          <div style={{ marginBottom: '2rem' }}>
+          <div style={{ marginBottom: '1.5rem' }}>
             <p className="text-body" style={{ color: 'var(--text-primary)' }}>{user?.name}</p>
             <p className="text-small">{user?.hostelBlock}</p>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+              <div className="online-indicator" style={{ position: 'static' }}></div>
+              {onlineCount} Users Online
+            </div>
           </div>
 
-          <h4 className="nav-title">Online Friends ({onlineFriends.length})</h4>
+          {friendRequests.length > 0 && (
+            <>
+              <h4 className="nav-title" style={{ color: '#f59e0b' }}>Friend Requests ({friendRequests.length})</h4>
+              <ul className="friend-list" style={{ marginBottom: '1.5rem' }}>
+                {friendRequests.map(req => (
+                  <li key={req._id} className="friend-item" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                    <div className="friend-info" style={{ flex: 1 }}>
+                      <span className="friend-name">{req.name}</span>
+                      <span className="friend-hostel">{req.hostelBlock}</span>
+                    </div>
+                    <button 
+                      className="icon-btn" 
+                      onClick={() => acceptRequest(req._id)}
+                      title="Accept Request"
+                      style={{ background: '#10b981', color: 'white' }}
+                    >
+                      <Check size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <h4 className="nav-title">Your Friends ({friends.length})</h4>
           <ul className="friend-list">
-            {onlineFriends.map(friend => (
+            {friends.map(friend => (
               <li key={friend._id} className="friend-item">
                 <div className="avatar-placeholder">
                   {friend.name.charAt(0).toUpperCase()}
-                  <div className="online-indicator"></div>
+                  {friend.isOnline && <div className="online-indicator"></div>}
                 </div>
                 <div className="friend-info">
                   <span className="friend-name">{friend.name}</span>
-                  <span className="friend-hostel">{friend.hostelBlock}</span>
+                  <span className="friend-hostel">{friend.isOnline ? 'Online' : 'Offline'}</span>
                 </div>
               </li>
             ))}
-            {onlineFriends.length === 0 && (
-              <p className="text-small">No one else is online right now.</p>
+            {friends.length === 0 && (
+              <p className="text-small text-muted">You haven't added any friends yet. Meet people in Omegle Mode!</p>
             )}
           </ul>
         </div>
