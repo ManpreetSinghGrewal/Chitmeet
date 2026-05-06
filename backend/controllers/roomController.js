@@ -3,8 +3,16 @@ const Message = require('../models/Message');
 
 const getRooms = async (req, res) => {
   try {
+    const io = req.app.get('io');
     const rooms = await Room.find({});
-    res.json(rooms);
+    
+    const roomsWithCounts = rooms.map(room => {
+      const roomObj = room.toObject();
+      const activeCount = io.sockets.adapter.rooms.get(roomObj.id)?.size || 0;
+      return { ...roomObj, activeUsers: activeCount };
+    });
+
+    res.json(roomsWithCounts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
