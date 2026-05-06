@@ -109,14 +109,16 @@ io.on('connection', async (socket) => {
   socket.on('webrtc-offer', (data) => {
     socket.to(data.target).emit('webrtc-offer', {
       sdp: data.sdp,
-      callerId: socket.id
+      callerId: socket.id,
+      callerName: data.callerName
     });
   });
 
   socket.on('webrtc-answer', (data) => {
     socket.to(data.target).emit('webrtc-answer', {
       sdp: data.sdp,
-      answererId: socket.id
+      answererId: socket.id,
+      answererName: data.answererName
     });
   });
 

@@ -23,6 +23,7 @@ const ChatRoom = () => {
   const [remoteStreams, setRemoteStreams] = useState([]); // [{ peerId, stream }]
   const [friendRequestSent, setFriendRequestSent] = useState(false);
   const [isSearchingNext, setIsSearchingNext] = useState(false);
+  const [peerNames, setPeerNames] = useState({}); // { socketId: 'Name' }
 
   // Omegle specific partner ID & Name
   const partnerUserId = location.state?.partnerUserId || null;
@@ -210,7 +211,7 @@ const ChatRoom = () => {
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('webrtc-offer', { target: peerId, sdp: offer });
+        socket.emit('webrtc-offer', { target: peerId, sdp: offer, callerName: user?.name });
       } catch (e) {
         console.error('Error creating offer', e);
       }
@@ -219,6 +220,9 @@ const ChatRoom = () => {
     // 2. Received offer, create answer
     socket.on('webrtc-offer', async (data) => {
       const peerId = data.callerId;
+      if (data.callerName) {
+        setPeerNames(prev => ({ ...prev, [peerId]: data.callerName }));
+      }
       console.log('Received offer from', peerId);
       setConnectionStatus('Receiving connection...');
       
@@ -230,7 +234,7 @@ const ChatRoom = () => {
         
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit('webrtc-answer', { target: peerId, sdp: answer });
+        socket.emit('webrtc-answer', { target: peerId, sdp: answer, answererName: user?.name });
       } catch (e) {
         console.error('Error handling offer and creating answer', e);
       }
@@ -239,6 +243,9 @@ const ChatRoom = () => {
     // 3. Received answer
     socket.on('webrtc-answer', async (data) => {
       const peerId = data.answererId;
+      if (data.answererName) {
+        setPeerNames(prev => ({ ...prev, [peerId]: data.answererName }));
+      }
       console.log('Received answer from', peerId);
       const pc = peerConnectionsRef.current.get(peerId);
       if (pc) {
@@ -302,6 +309,12 @@ const ChatRoom = () => {
         peerConnectionsRef.current.delete(peerId);
       }
       iceCandidateBuffers.current.delete(peerId);
+      
+      setPeerNames(prev => {
+        const newNames = { ...prev };
+        delete newNames[peerId];
+        return newNames;
+      });
     });
 
     return () => {
@@ -464,7 +477,9 @@ const ChatRoom = () => {
                     }
                   }}
                 ></video>
-                <div className="participant-label">{partnerName}</div>
+                <div className="participant-label">
+                  {isOmegleMode ? partnerName : (peerNames[remote.peerId] || 'Partner')}
+                </div>
               </div>
             ))}
 
