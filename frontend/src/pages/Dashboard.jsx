@@ -270,15 +270,6 @@ const Dashboard = () => {
             <h3 className="heading-md">Available Rooms</h3>
             <p className="text-small">Select a room to begin your session</p>
           </div>
-          <div className="rooms-actions flex-center gap-4">
-            <div className="dropdown">
-              All Rooms <ChevronDown size={16} />
-            </div>
-            <div className="view-toggles flex-center">
-              <button className="icon-btn active"><Grid size={18} /></button>
-              <button className="icon-btn"><List size={18} /></button>
-            </div>
-          </div>
         </div>
 
         <div className="rooms-grid">
