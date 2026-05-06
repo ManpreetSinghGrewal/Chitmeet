@@ -9,8 +9,8 @@ const Auth = () => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '', gender: '', hostelBlock: '' });
   const [error, setError] = useState('');
   
-  const maleHostels = ['FRANKLIN-A', 'FRANKLIN-B', 'archimedies-A', 'archimedies-B', 'armstrong', 'magellan', 'marcopolo'];
-  const femaleHostels = ['NGH-A', 'NGH-B', 'vasco', 'columbus', 'IBN-A', 'IBN-B', 'IBN-C', 'PIE-A', 'PIE-B', 'PIE-C'];
+  const maleHostels = ['FRANKLIN-A', 'FRANKLIN-B', 'ARCHIMEDIES-A', 'ARCHIMEDIES-B', 'ARMSTRONG', 'MAGELLAN', 'MARCOPOLO'];
+  const femaleHostels = ['NGH-A', 'NGH-B', 'VASCO', 'COLUMBUS', 'IBN-A', 'IBN-B', 'IBN-C', 'PIE-A', 'PIE-B', 'PIE-C'];
 
   let availableHostels = [];
   if (formData.gender === 'Male') availableHostels = maleHostels;
