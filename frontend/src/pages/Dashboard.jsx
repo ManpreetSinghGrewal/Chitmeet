@@ -117,9 +117,15 @@ const Dashboard = () => {
     <div className="dashboard-container">
       {/* Top Navbar */}
       <header className="top-navbar glass-panel">
-        <div className="navbar-left flex-center">
-          <img src="/favicon.svg.jpeg" alt="HostelAdda Logo" style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '4px' }} />
-          <span className="heading-md" style={{ marginLeft: '0.5rem' }}>HostelAdda</span>
+        <div className="navbar-left flex-center" style={{ gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="flex-center">
+            <img src="/favicon.svg.jpeg" alt="HostelAdda Logo" style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '4px' }} />
+            <span className="heading-md" style={{ marginLeft: '0.5rem' }}>HostelAdda</span>
+          </div>
+          <div className="online-badge">
+            <div className="online-indicator-dot"></div>
+            {onlineCount} Online (👨 {onlineMaleCount} 👩 {onlineFemaleCount})
+          </div>
         </div>
         
         <div className="navbar-right flex-center">
@@ -128,10 +134,6 @@ const Dashboard = () => {
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
               <Home size={18} /> Home
             </button>
-            <div className="online-badge" style={{ marginLeft: '1rem' }}>
-              <div className="online-indicator-dot"></div>
-              {onlineCount} Online (👨 {onlineMaleCount} 👩 {onlineFemaleCount})
-            </div>
           </div>
           
           <button className="icon-btn mobile-menu-toggle" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
@@ -160,10 +162,6 @@ const Dashboard = () => {
                 <button className="icon-btn" onClick={() => { setIsMobileMenuOpen(false); openEditProfile(); }} title="Edit Profile">
                   <Edit2 size={16} />
                 </button>
-              </div>
-              <div className="online-badge mt-2">
-                <div className="online-indicator-dot"></div>
-                {onlineCount} Online (👨 {onlineMaleCount} 👩 {onlineFemaleCount})
               </div>
             </div>
 
