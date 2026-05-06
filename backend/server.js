@@ -30,13 +30,23 @@ const io = new Server(server, {
 
 let waitingUser = null; // For Omegle-style matching
 
+// Track number of active sockets per user to handle multiple tabs & refreshes
+const userConnectionCounts = new Map();
+
 io.on('connection', async (socket) => {
   const userId = socket.handshake.query.userId;
 
   if (userId && userId !== 'undefined') {
-    console.log(`User connected: ${userId} with socket ${socket.id}`);
-    await User.findByIdAndUpdate(userId, { isOnline: true });
-    io.emit('user-online', userId);
+    const currentCount = (userConnectionCounts.get(userId) || 0) + 1;
+    userConnectionCounts.set(userId, currentCount);
+    
+    console.log(`User connected: ${userId} with socket ${socket.id}. Active connections: ${currentCount}`);
+    
+    // Only set to online if this is their first connection
+    if (currentCount === 1) {
+      await User.findByIdAndUpdate(userId, { isOnline: true });
+      io.emit('user-online', userId);
+    }
   }
 
   // Normal Room Join
@@ -156,9 +166,17 @@ io.on('connection', async (socket) => {
 
   socket.on('disconnect', async () => {
     if (userId && userId !== 'undefined') {
-      console.log(`User disconnected: ${userId}`);
-      await User.findByIdAndUpdate(userId, { isOnline: false });
-      io.emit('user-offline', userId);
+      const currentCount = (userConnectionCounts.get(userId) || 0) - 1;
+      
+      if (currentCount <= 0) {
+        userConnectionCounts.delete(userId);
+        console.log(`User completely disconnected: ${userId}`);
+        await User.findByIdAndUpdate(userId, { isOnline: false });
+        io.emit('user-offline', userId);
+      } else {
+        userConnectionCounts.set(userId, currentCount);
+        console.log(`User socket disconnected: ${userId}. Remaining connections: ${currentCount}`);
+      }
     }
   });
 });
