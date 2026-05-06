@@ -279,13 +279,21 @@ const ChatRoom = () => {
     });
 
     socket.on('receive-message', (newMessage) => {
+      // Generate a local ID before setting state to keep the updater function pure
+      if (!newMessage._id && !newMessage.localId) {
+          newMessage.localId = Date.now() + Math.random();
+      }
+
       setMessages((prev) => {
-        if (prev.some(msg => 
-          (msg._id && newMessage._id && msg._id === newMessage._id) || 
-          (msg.time === newMessage.time && msg.text === newMessage.text && msg.senderId === newMessage.senderId)
-        )) {
+        // Prevent duplicate appending if the message has an ID that already exists
+        if (newMessage._id && prev.some(msg => msg._id === newMessage._id)) {
           return prev;
         }
+
+        if (prev.some(msg => msg.localId && newMessage.localId && msg.localId === newMessage.localId)) {
+            return prev;
+        }
+
         return [...prev, newMessage];
       });
       scrollToBottom();
