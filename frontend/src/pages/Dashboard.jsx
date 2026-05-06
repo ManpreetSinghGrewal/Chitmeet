@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Video, MessageSquare, LogOut, Hash, Shuffle, Check, Home, Users, Layout, MicOff, Gamepad2, BookOpen, ShieldCheck, ChevronDown, Grid, List, Edit2, X, MoreVertical } from 'lucide-react';
+import { Search, Video, MessageSquare, LogOut, Hash, Shuffle, Check, Home, Users, Layout, MicOff, Gamepad2, BookOpen, ShieldCheck, ChevronDown, Grid, List, Edit2, X, MoreVertical, Sun, Moon } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
+import { ThemeContext } from '../contexts/ThemeContext';
 import './Dashboard.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -25,6 +26,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user, logout, updateProfile } = useContext(AuthContext);
   const socket = useContext(SocketContext);
+  const { isDark, toggleTheme } = useContext(ThemeContext);
 
   const fetchData = async () => {
     try {
@@ -130,9 +132,13 @@ const Dashboard = () => {
         
         <div className="navbar-right flex-center">
           {/* Desktop Nav Items */}
-          <div className="desktop-nav">
+          <div className="desktop-nav" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
               <Home size={18} /> Home
+            </button>
+            
+            <button className="icon-btn theme-toggle" onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'}>
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
           </div>
           

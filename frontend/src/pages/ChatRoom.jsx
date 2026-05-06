@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Mic, MicOff, Video, VideoOff, PhoneOff, Send, Smile, Paperclip, FastForward, UserPlus } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Video, VideoOff, PhoneOff, Send, Smile, Paperclip, FastForward, UserPlus, Sun, Moon } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SocketContext } from '../contexts/SocketContext';
+import { ThemeContext } from '../contexts/ThemeContext';
 import './ChatRoom.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -14,6 +15,7 @@ const ChatRoom = () => {
   const location = useLocation();
   const { user } = useContext(AuthContext);
   const socket = useContext(SocketContext);
+  const { isDark, toggleTheme } = useContext(ThemeContext);
   
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -460,7 +462,16 @@ const ChatRoom = () => {
             <button className="btn btn-primary" onClick={handleNextPerson}>
               <FastForward size={16} /> Next Person
             </button>
+            <button className="icon-btn theme-toggle" onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'}>
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
           </div>
+        )}
+        
+        {!isOmegleMode && (
+          <button className="icon-btn theme-toggle" onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
         )}
       </header>
 

@@ -1,7 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Mail, Building } from 'lucide-react';
+import { User, Lock, Mail, Building, Sun, Moon } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
+import { ThemeContext } from '../contexts/ThemeContext';
 import './Auth.css';
 
 const Auth = () => {
@@ -19,6 +20,7 @@ const Auth = () => {
   
   const navigate = useNavigate();
   const { login, register } = useContext(AuthContext);
+  const { isDark, toggleTheme } = useContext(ThemeContext);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -40,6 +42,10 @@ const Auth = () => {
 
   return (
     <div className="auth-container flex-center">
+      <button className="icon-btn theme-toggle" style={{ position: 'absolute', top: '1.5rem', right: '1.5rem' }} onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'}>
+        {isDark ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+      
       <div className="glass-panel auth-card">
         <div className="auth-header text-center">
           <h2 className="heading-lg">{isLogin ? 'Welcome Back' : 'Join HostelAdda'}</h2>

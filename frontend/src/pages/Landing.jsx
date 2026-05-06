@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Video, Users, Shield } from 'lucide-react';
+import { MessageSquare, Video, Users, Shield, Sun, Moon } from 'lucide-react';
+import { ThemeContext } from '../contexts/ThemeContext';
 import './Landing.css';
 
 const Landing = () => {
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useContext(ThemeContext);
 
   return (
     <div className="landing-container">
@@ -18,9 +20,14 @@ const Landing = () => {
           <img src="/favicon.svg.jpeg" alt="HostelAdda Logo" style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px' }} />
           <span className="heading-md" style={{ marginLeft: '0.5rem' }}>HostelAdda</span>
         </div>
-        <div className="nav-actions">
-          <button className="btn btn-secondary" onClick={() => navigate('/auth')}>Login</button>
-          <button className="btn btn-primary" onClick={() => navigate('/auth')} style={{ marginLeft: '1rem' }}>Get Started</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginLeft: 'auto' }}>
+          <button className="icon-btn theme-toggle" onClick={toggleTheme} title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <div className="nav-actions">
+            <button className="btn btn-secondary" onClick={() => navigate('/auth')}>Login</button>
+            <button className="btn btn-primary" onClick={() => navigate('/auth')} style={{ marginLeft: '1rem' }}>Get Started</button>
+          </div>
         </div>
       </nav>
 
