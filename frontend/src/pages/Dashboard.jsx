@@ -119,7 +119,7 @@ const Dashboard = () => {
       <header className="top-navbar glass-panel">
         <div className="navbar-left flex-center">
           <MessageSquare size={24} color="var(--accent-primary)" />
-          <span className="heading-md" style={{ marginLeft: '0.5rem' }}>ChitMeet</span>
+          <span className="heading-md" style={{ marginLeft: '0.5rem' }}>HostelAdda</span>
         </div>
         
         <div className="navbar-right flex-center">
@@ -181,7 +181,7 @@ const Dashboard = () => {
                 </li>
               ))}
               {friends.length === 0 && (
-                <p className="text-small text-muted">You haven't added any friends yet. Meet people in Chitmeet Random Mode!</p>
+                <p className="text-small text-muted">You haven't added any friends yet. Meet people in HostelAdda Random Mode!</p>
               )}
             </ul>
 
@@ -247,7 +247,7 @@ const Dashboard = () => {
             </div>
             <div>
               <div className="flex-center" style={{ justifyContent: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
-                <h3 className="heading-md" style={{ margin: 0 }}>Chitmeet Random Match</h3>
+                <h3 className="heading-md" style={{ margin: 0 }}>HostelAdda Random Match</h3>
                 <span className="badge badge-purple">Instant</span>
               </div>
               <p className="text-small" style={{ color: 'var(--text-secondary)' }}>

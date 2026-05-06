@@ -16,7 +16,7 @@ const Landing = () => {
       <nav className="glass-panel navbar flex-between">
         <div className="logo flex-center">
           <MessageSquare size={28} color="var(--accent-primary)" />
-          <span className="heading-md" style={{ marginLeft: '0.5rem' }}>ChitMeet</span>
+          <span className="heading-md" style={{ marginLeft: '0.5rem' }}>HostelAdda</span>
         </div>
         <div className="nav-actions">
           <button className="btn btn-secondary" onClick={() => navigate('/auth')}>Login</button>

@@ -42,7 +42,7 @@ const Auth = () => {
     <div className="auth-container flex-center">
       <div className="glass-panel auth-card">
         <div className="auth-header text-center">
-          <h2 className="heading-lg">{isLogin ? 'Welcome Back' : 'Join ChitMeet'}</h2>
+          <h2 className="heading-lg">{isLogin ? 'Welcome Back' : 'Join HostelAdda'}</h2>
           <p className="text-body">{isLogin ? 'Login to access your hostel rooms' : 'Register to connect with peers'}</p>
         </div>
 

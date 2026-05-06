@@ -412,7 +412,7 @@ const ChatRoom = () => {
           </button>
           <div>
             <h2 className="heading-md">
-              {isOmegleMode ? 'Chitmeet Random Match' : `Room: ${roomId}`}
+              {isOmegleMode ? 'HostelAdda Random Match' : `Room: ${roomId}`}
             </h2>
             <p className="text-small" style={{ color: connectionStatus === 'Connected!' ? '#10b981' : '#f59e0b' }}>
               {connectionStatus}
