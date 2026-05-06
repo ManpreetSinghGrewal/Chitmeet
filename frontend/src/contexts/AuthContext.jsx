@@ -7,15 +7,11 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
+  const [user, setUser] = useState(() => {
     const userInfo = localStorage.getItem('userInfo');
-    if (userInfo) {
-      setUser(JSON.parse(userInfo));
-    }
-  }, []);
+    return userInfo ? JSON.parse(userInfo) : null;
+  });
 
   const login = async (email, password) => {
     try {
