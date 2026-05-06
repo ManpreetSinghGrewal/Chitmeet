@@ -22,6 +22,7 @@ const ChatRoom = () => {
   const [connectionStatus, setConnectionStatus] = useState('Waiting for others...');
   const [remoteStreams, setRemoteStreams] = useState([]); // [{ peerId, stream }]
   const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [isSearchingNext, setIsSearchingNext] = useState(false);
 
   // Omegle specific partner ID
   const partnerUserId = location.state?.partnerUserId || null;
@@ -42,6 +43,16 @@ const ChatRoom = () => {
   useEffect(() => {
     if (!user) navigate('/auth');
   }, [user, navigate]);
+
+  useEffect(() => {
+    // Cleanup local stream on complete unmount (when navigating away from ChatRoom entirely)
+    return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
+    };
+  }, []);
 
   // Fetch messages if it's a permanent room, clear if random
   useEffect(() => {
@@ -89,18 +100,26 @@ const ChatRoom = () => {
 
     const initializeMedia = async () => {
       try {
-        setConnectionStatus('Accessing camera...');
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localStreamRef.current = stream;
+        if (!localStreamRef.current) {
+          setConnectionStatus('Accessing camera...');
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          localStreamRef.current = stream;
+        }
+        
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.srcObject = localStreamRef.current;
         }
 
-        if (enforceNoMic) {
-          stream.getAudioTracks().forEach(track => {
+        if (enforceNoMic && localStreamRef.current) {
+          localStreamRef.current.getAudioTracks().forEach(track => {
             track.enabled = false;
           });
           setIsAudioMuted(true);
+        } else if (!enforceNoMic && localStreamRef.current) {
+          localStreamRef.current.getAudioTracks().forEach(track => {
+            track.enabled = true;
+          });
+          setIsAudioMuted(false);
         }
 
         setConnectionStatus('Waiting for others...');
@@ -261,6 +280,11 @@ const ChatRoom = () => {
       scrollToBottom();
     });
 
+    socket.on('match-found', (data) => {
+      setIsSearchingNext(false);
+      navigate(`/chat/${data.roomId}`, { state: { partnerUserId: data.partnerUserId }, replace: true });
+    });
+
     socket.on('user-left', (peerId) => {
       console.log('User left the room', peerId);
       
@@ -286,10 +310,10 @@ const ChatRoom = () => {
       socket.off('webrtc-ice-candidate');
       socket.off('receive-message');
       socket.off('user-left');
+      socket.off('match-found');
       
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-      }
+      // Do NOT stop local stream here because we want to reuse it between random match rooms.
+      // Full unmount cleanup handles it.
       
       peerConnectionsRef.current.forEach(pc => pc.close());
       peerConnectionsRef.current.clear();
@@ -345,7 +369,13 @@ const ChatRoom = () => {
 
   const handleNextPerson = () => {
     socket.emit('leave-room', roomId);
-    navigate('/dashboard');
+    setRemoteStreams([]);
+    peerConnectionsRef.current.forEach(pc => pc.close());
+    peerConnectionsRef.current.clear();
+    iceCandidateBuffers.current.clear();
+    setIsSearchingNext(true);
+    setConnectionStatus('Searching for next person...');
+    socket.emit('join-random');
   };
 
   const handleSendFriendRequest = async () => {
@@ -364,7 +394,7 @@ const ChatRoom = () => {
 
   // Video Grid layout calculation
   // In Random match mode, local video is PiP, so it doesn't take up a grid slot!
-  const totalVideos = isOmegleMode ? Math.max(1, remoteStreams.length) : remoteStreams.length + 1; 
+  const totalVideos = isOmegleMode ? Math.max(1, isSearchingNext ? 1 : remoteStreams.length) : remoteStreams.length + 1; 
   let gridClass = 'grid-1';
   if (totalVideos === 2) gridClass = 'grid-2';
   else if (totalVideos >= 3 && totalVideos <= 4) gridClass = 'grid-4';
@@ -414,7 +444,12 @@ const ChatRoom = () => {
           <div className={`video-grid ${gridClass}`}>
             
             {/* Render all remote streams */}
-            {remoteStreams.map((remote) => (
+            {isSearchingNext ? (
+              <div className="video-tile loading-tile flex-center">
+                <div className="loader"></div>
+                <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Searching for partner...</p>
+              </div>
+            ) : remoteStreams.map((remote) => (
               <div key={remote.peerId} className="video-tile">
                 <video 
                   autoPlay 
@@ -432,7 +467,7 @@ const ChatRoom = () => {
             ))}
 
             {/* Local Video */}
-            <div className={`video-tile ${remoteStreams.length > 0 && isOmegleMode ? 'local-video-pip' : ''}`}>
+            <div className={`video-tile ${(remoteStreams.length > 0 || isSearchingNext) && isOmegleMode ? 'local-video-pip' : ''}`}>
               <video 
                 ref={localVideoRef} 
                 autoPlay 
