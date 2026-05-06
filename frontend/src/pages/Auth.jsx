@@ -32,6 +32,10 @@ const Auth = () => {
     if (isLogin) {
       res = await login(formData.email, formData.password);
     } else {
+      if (!formData.email.endsWith('@chitkara.edu.in')) {
+        setError('Only @chitkara.edu.in email addresses are allowed for registration.');
+        return;
+      }
       res = await register(formData.name, formData.email, formData.password, formData.gender, formData.hostelBlock);
     }
 
@@ -96,11 +100,12 @@ const Auth = () => {
           )}
 
           <div className="input-group">
-            <label className="input-label">Email Address</label>
+            <label className="input-label">University Email</label>
             <div className="input-with-icon">
               <Mail size={18} className="input-icon" />
-              <input type="email" name="email" className="input-field" placeholder="your@email.com" onChange={handleChange} required />
+              <input type="email" name="email" className="input-field" placeholder="student@chitkara.edu.in" onChange={handleChange} required />
             </div>
+            {!isLogin && <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>Only @chitkara.edu.in emails allowed.</small>}
           </div>
 
           <div className="input-group">

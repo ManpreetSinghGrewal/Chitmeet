@@ -9,6 +9,10 @@ const registerUser = async (req, res) => {
   const { name, email, password, gender, hostelBlock } = req.body;
 
   try {
+    if (!email.endsWith('@chitkara.edu.in')) {
+      return res.status(400).json({ message: 'Only @chitkara.edu.in email addresses are allowed.' });
+    }
+
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: 'User already exists' });
