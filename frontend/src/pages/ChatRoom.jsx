@@ -280,7 +280,10 @@ const ChatRoom = () => {
 
     socket.on('receive-message', (newMessage) => {
       setMessages((prev) => {
-        if (prev.some(msg => msg._id === newMessage._id || (msg.time === newMessage.time && msg.text === newMessage.text))) {
+        if (prev.some(msg => 
+          (msg._id && newMessage._id && msg._id === newMessage._id) || 
+          (msg.time === newMessage.time && msg.text === newMessage.text && msg.senderId === newMessage.senderId)
+        )) {
           return prev;
         }
         return [...prev, newMessage];

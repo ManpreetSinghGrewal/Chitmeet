@@ -95,11 +95,13 @@ io.on('connection', async (socket) => {
   socket.on('send-message', async (data) => {
     try {
       const { roomId, senderId, senderName, text, time } = data;
+      let newMessageId = null;
       // Don't save random chat messages to DB
       if (!roomId.startsWith('random-')) {
-        await Message.create({ roomId, senderId, senderName, text, time });
+        const savedMessage = await Message.create({ roomId, senderId, senderName, text, time });
+        newMessageId = savedMessage._id;
       }
-      io.to(roomId).emit('receive-message', { roomId, senderId, senderName, text, time });
+      io.to(roomId).emit('receive-message', { _id: newMessageId, roomId, senderId, senderName, text, time });
     } catch (error) {
       console.error('Error saving message', error);
     }
