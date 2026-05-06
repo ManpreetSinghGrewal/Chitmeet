@@ -72,11 +72,23 @@ io.on('connection', async (socket) => {
     }
   });
 
-  socket.on('leave-room', (roomId) => {
+  socket.on('leave-room', async (roomId) => {
     socket.leave(roomId);
     socket.to(roomId).emit('user-left', socket.id);
     if (waitingUser && waitingUser.socketId === socket.id) {
       waitingUser = null;
+    }
+
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room || room.size === 0) {
+      if (!roomId.startsWith('random-')) {
+        try {
+          await Message.deleteMany({ roomId });
+          console.log(`Room ${roomId} is empty, cleared messages.`);
+        } catch (error) {
+          console.error('Error clearing empty room chat', error);
+        }
+      }
     }
   });
 
@@ -115,15 +127,32 @@ io.on('connection', async (socket) => {
     });
   });
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnecting', async () => {
     if (waitingUser && waitingUser.socketId === socket.id) {
       waitingUser = null;
     }
     // Tell all rooms they were in that they left
-    socket.rooms.forEach(roomId => {
-      socket.to(roomId).emit('user-left', socket.id);
-    });
+    for (const roomId of socket.rooms) {
+      if (roomId !== socket.id) {
+        socket.to(roomId).emit('user-left', socket.id);
+        
+        const room = io.sockets.adapter.rooms.get(roomId);
+        // If size is 1, this socket is the last one in the room (since it hasn't fully left yet)
+        if (room && room.size === 1) {
+          if (!roomId.startsWith('random-')) {
+            try {
+              await Message.deleteMany({ roomId });
+              console.log(`Room ${roomId} is empty (disconnecting), cleared messages.`);
+            } catch (error) {
+              console.error('Error clearing empty room chat on disconnect', error);
+            }
+          }
+        }
+      }
+    }
+  });
 
+  socket.on('disconnect', async () => {
     if (userId && userId !== 'undefined') {
       console.log(`User disconnected: ${userId}`);
       await User.findByIdAndUpdate(userId, { isOnline: false });
