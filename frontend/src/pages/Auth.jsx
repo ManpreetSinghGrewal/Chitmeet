@@ -7,7 +7,8 @@ import './Auth.css';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', gender: '', hostelBlock: '' });
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', gender: '', hostelBlock: '', otp: '' });
   const [error, setError] = useState('');
   
   const maleHostels = ['FRANKLIN-A', 'FRANKLIN-B', 'ARCHIMEDIES-A', 'ARCHIMEDIES-B', 'ARMSTRONG', 'MAGELLAN', 'MARCOPOLO'];
@@ -19,7 +20,7 @@ const Auth = () => {
   else if (formData.gender === 'Others') availableHostels = [...maleHostels, ...femaleHostels];
   
   const navigate = useNavigate();
-  const { login, register } = useContext(AuthContext);
+  const { login, register, sendOtp } = useContext(AuthContext);
   const { isDark, toggleTheme } = useContext(ThemeContext);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -36,7 +37,16 @@ const Auth = () => {
         setError('Only @chitkara.edu.in email addresses are allowed for registration.');
         return;
       }
-      res = await register(formData.name, formData.email, formData.password, formData.gender, formData.hostelBlock);
+      
+      if (!showOtpInput) {
+        res = await sendOtp(formData.email);
+        if (res.success) {
+          setShowOtpInput(true);
+          return; // Stop here, wait for user to enter OTP
+        }
+      } else {
+        res = await register(formData.name, formData.email, formData.password, formData.gender, formData.hostelBlock, formData.otp);
+      }
     }
 
     if (!res.success) {
@@ -112,19 +122,30 @@ const Auth = () => {
             <label className="input-label">Password</label>
             <div className="input-with-icon">
               <Lock size={18} className="input-icon" />
-              <input type="password" name="password" className="input-field" placeholder="••••••••" onChange={handleChange} required />
+              <input type="password" name="password" className="input-field" placeholder="••••••••" onChange={handleChange} required disabled={showOtpInput} />
             </div>
           </div>
 
+          {!isLogin && showOtpInput && (
+            <div className="input-group" style={{ marginTop: '1rem' }}>
+              <label className="input-label">Enter OTP</label>
+              <div className="input-with-icon">
+                <Lock size={18} className="input-icon" />
+                <input type="text" name="otp" className="input-field" placeholder="6-digit OTP" onChange={handleChange} required />
+              </div>
+              <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>OTP sent to {formData.email}</small>
+            </div>
+          )}
+
           <button type="submit" className="btn btn-primary w-100 mt-4">
-            {isLogin ? 'Login' : 'Sign Up'}
+            {isLogin ? 'Login' : (showOtpInput ? 'Verify & Sign Up' : 'Get OTP')}
           </button>
         </form>
 
         <div className="auth-footer text-center">
           <p className="text-small">
             {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <span className="auth-link" onClick={() => setIsLogin(!isLogin)}>
+            <span className="auth-link" onClick={() => { setIsLogin(!isLogin); setShowOtpInput(false); setError(''); }}>
               {isLogin ? 'Sign up' : 'Login'}
             </span>
           </p>

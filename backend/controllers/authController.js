@@ -1,12 +1,60 @@
 const User = require('../models/User');
+const OTP = require('../models/OTP');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
+const sendOtp = async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.endsWith('@chitkara.edu.in')) {
+    return res.status(400).json({ message: 'A valid @chitkara.edu.in email is required' });
+  }
+
+  try {
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Generate 6 digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Upsert OTP in database
+    await OTP.findOneAndUpdate(
+      { email },
+      { otp, createdAt: Date.now() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Send email using nodemailer
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'HostelAdda Registration OTP',
+      text: `Your OTP for HostelAdda registration is: ${otp}\nThis OTP is valid for 5 minutes.`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.status(200).json({ message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error('Error sending OTP:', error);
+    res.status(500).json({ message: 'Error sending OTP. Please ensure email credentials are set in the backend.' });
+  }
+};
+
 const registerUser = async (req, res) => {
-  const { name, email, password, gender, hostelBlock } = req.body;
+  const { name, email, password, gender, hostelBlock, otp } = req.body;
 
   try {
     if (!email.endsWith('@chitkara.edu.in')) {
@@ -18,7 +66,19 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
 
+    if (!otp) {
+      return res.status(400).json({ message: 'OTP is required' });
+    }
+
+    const record = await OTP.findOne({ email });
+    if (!record || record.otp !== otp) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
     const user = await User.create({ name, email, password, gender, hostelBlock });
+    
+    // Clear OTP after successful registration
+    await OTP.deleteOne({ email });
     
     if (user) {
       res.status(201).json({
@@ -60,4 +120,4 @@ const loginUser = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser };
+module.exports = { registerUser, loginUser, sendOtp };

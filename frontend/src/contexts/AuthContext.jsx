@@ -25,9 +25,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password, gender, hostelBlock) => {
+  const sendOtp = async (email) => {
     try {
-      const { data } = await axios.post(`${API_URL}/api/auth/register`, { name, email, password, gender, hostelBlock });
+      const { data } = await axios.post(`${API_URL}/api/auth/send-otp`, { email });
+      return { success: true, message: data.message };
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Failed to send OTP' };
+    }
+  };
+
+  const register = async (name, email, password, gender, hostelBlock, otp) => {
+    try {
+      const { data } = await axios.post(`${API_URL}/api/auth/register`, { name, email, password, gender, hostelBlock, otp });
       setUser(data);
       localStorage.setItem('userInfo', JSON.stringify(data));
       navigate('/dashboard');
@@ -57,7 +66,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateProfile, sendOtp }}>
       {children}
     </AuthContext.Provider>
   );
