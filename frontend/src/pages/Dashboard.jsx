@@ -251,7 +251,7 @@ const Dashboard = () => {
                 <h3 className="heading-md" style={{ margin: 0 }}>Chitmeet Random Match</h3>
                 <span className="badge badge-purple">Instant</span>
               </div>
-              <p className="text-small" style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+              <p className="text-small" style={{ color: 'var(--text-secondary)' }}>
                 Get matched with another user instantly.<br />
                 Video and audio are enabled for this session.
               </p>
