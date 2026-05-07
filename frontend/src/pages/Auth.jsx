@@ -80,7 +80,7 @@ const Auth = () => {
                 <label className="input-label">Full Name</label>
                 <div className="input-with-icon">
                   <User size={18} className="input-icon" />
-                  <input type="text" name="name" className="input-field" placeholder="John Doe" onChange={handleChange} required />
+                  <input type="text" name="name" className="input-field" placeholder="John Doe" value={formData.name} onChange={handleChange} required />
                 </div>
               </div>
               <div className="input-group">
@@ -118,7 +118,7 @@ const Auth = () => {
             <label className="input-label">University Email</label>
             <div className="input-with-icon">
               <Mail size={18} className="input-icon" />
-              <input type="email" name="email" className="input-field" placeholder="student@chitkara.edu.in" onChange={handleChange} required />
+              <input type="email" name="email" className="input-field" placeholder="student@chitkara.edu.in" value={formData.email} onChange={handleChange} required />
             </div>
             {!isLogin && <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>Only @chitkara.edu.in emails allowed.</small>}
           </div>
@@ -127,7 +127,7 @@ const Auth = () => {
             <label className="input-label">Password</label>
             <div className="input-with-icon">
               <Lock size={18} className="input-icon" />
-              <input type="password" name="password" className="input-field" placeholder="••••••••" onChange={handleChange} required disabled={showOtpInput} />
+              <input type="password" name="password" className="input-field" placeholder="••••••••" value={formData.password} onChange={handleChange} required disabled={showOtpInput} />
             </div>
           </div>
 
@@ -136,7 +136,7 @@ const Auth = () => {
               <label className="input-label">Enter OTP</label>
               <div className="input-with-icon">
                 <Lock size={18} className="input-icon" />
-                <input type="text" name="otp" className="input-field" placeholder="6-digit OTP" onChange={handleChange} required />
+                <input type="text" name="otp" className="input-field" placeholder="6-digit OTP" value={formData.otp} onChange={handleChange} required />
               </div>
               <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>OTP sent to {formData.email}</small>
             </div>
